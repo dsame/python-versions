@@ -1,6 +1,6 @@
-using module "./builders/nix-python-builder.psm1"
+using module "./builders/python-builder.psm1"
 
-class macOSPythonBuilder : NixPythonBuilder {
+class macOSPythonBuilder : PythonBuilder {
     <#
     .SYNOPSIS
     MacOS Python builder class.
@@ -57,14 +57,48 @@ class macOSPythonBuilder : NixPythonBuilder {
         Execute-Command -Command $configureString
     }
 
-    [void] PrepareEnvironment() {
+    [uri] GetPkgUri() {
         <#
         .SYNOPSIS
-        Prepare system environment by installing dependencies and required packages.
+        Get base Python URI and return complete URI for Python sources.
         #>
 
-        ### reinstall header files to Avoid issue with X11 headers on Mojave
-        $pkgName = "/Library/Developer/CommandLineTools/Packages/macOS_SDK_headers_for_macOS_10.14.pkg"
-        Execute-Command -Command "sudo installer -pkg $pkgName -target /"
+        $base = $this.GetBaseUri()
+        $versionName = $this.GetBaseVersion()
+        $nativeVersion = Convert-Version -version $this.Version
+
+        return "${base}/${versionName}/Python-${nativeVersion}-macosx10.9.pkg"
+    }
+
+    [string] Download() {
+        <#
+        .SYNOPSIS
+        Download Python pkg. Returns the downloaded file location path.
+        #>
+
+        $pkgUri = $this.GetPkgUri()
+        Write-Host "pkg URI: $pkgUri"
+
+        $pgkFilepath = Download-File -Uri $pkgUri -OutputFolder $this.TempFolderLocation
+
+        Write-Debug "Done; pkg location: $pkgFilepath"
+
+        return $pgkFilepath
+    }
+
+    [void] Build() {
+        <#
+        .SYNOPSIS
+        Instal Python artifact from pkg. 
+        #>
+
+        Write-Host "Prepare Python Hostedtoolcache location..."
+        $this.PreparePythonToolcacheLocation()
+
+        Write-Host "Download Python $($this.Version)[$($this.Architecture)] pkg..."
+        $pkgLocation = $this.Download()
+
+        Write-Host "Install Python $($this.Version)[$($this.Architecture)] pkg..."
+        Execute-Command -Command "sudo installer -pkg $pkgLocation -target /"
     }
 }
